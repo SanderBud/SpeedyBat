@@ -1,5 +1,6 @@
 import os
 import time
+import math
 import pandas as pd
 import tkinter as tk
 from tkinter import filedialog
@@ -75,7 +76,6 @@ class ImageAnnotatorApp:
         self.feeding_buzz_button_sub.grid(row=2, column=2, sticky="w")
 
         # None checkbox
-        self.none_var = tk.BooleanVar()
         self.none_checkbox = tk.Checkbutton(self.button_frame, text="None", variable=self.none_var, onvalue=True,
                                             offvalue=False)
         self.none_checkbox.grid(row=3, column=0, sticky="w")
@@ -87,21 +87,9 @@ class ImageAnnotatorApp:
         self.next_image_button = tk.Button(self.button_frame, text=">", command=self.next_image)
         self.next_image_button.grid(row=4, column=0, sticky="e", pady=(10,10))
 
-        # Save note
+        # Notes
         self.note_text = tk.Text(self.button_frame, height=2, width=self.button_width, wrap="char")
-        self.note_text.grid(row=5, column=0, sticky="w", pady=(10,0))
-
-        self.note_button = tk.Button(self.button_frame,
-                                     text="Save note",
-                                     command=self.next_image,
-                                     width=self.button_width)
-        self.note_button.grid(row=6, column=0, sticky="w", pady=(5,10))
-        self.note_text.bind("<FocusIn>", self.textbox_focused)  # Bind the callback function
-
-        # # Unbind keys checkbox
-        # self.unbind_keys_checkbox = tk.Checkbutton(self.button_frame, text="Unbind keys",
-        #                                            command=self.toggle_key_bindings)
-        # self.unbind_keys_checkbox.grid(row=6, column=1, sticky="w")
+        self.note_text.grid(row=5, column=0, sticky="w", pady=(10,10))
 
         # Open file button
         self.open_file_button = tk.Button(self.button_frame,
@@ -125,6 +113,9 @@ class ImageAnnotatorApp:
         self.image_label = tk.Label(self.master)
         self.image_label.place(x=self.button_frame_width, y=0, width=image_label_width, relheight=1)
 
+        # Essential binds
+        self.note_text.bind("<FocusIn>", lambda event: self.textbox_focused())
+        self.master.bind("<Escape>", lambda event: self.unfocus_text())
 
     def bind_keys(self):
         # Bindings
@@ -136,7 +127,6 @@ class ImageAnnotatorApp:
         self.bindings["<space>"] = self.master.bind("<space>", lambda event: self.next_image())
         self.bindings["<r>"] = self.master.bind("<r>", lambda event: self.previous_image())
         self.bindings["<Shift-Escape>"] = self.master.bind("<Shift-Escape>", lambda event: self.quit())
-        self.bindings["<Escape>"] = self.master.bind("<Escape>", lambda event: self.unfocus_text())
 
     def open_current_file(self):
         current_file_path = os.path.join(self.folder_path, self.image_names[self.image_index])
@@ -187,7 +177,8 @@ class ImageAnnotatorApp:
             self.df = pd.DataFrame({'Image Name': self.image_names,
                                    'Social Call': [0] * len(self.image_names),
                                    'Feeding Buzz': [0] * len(self.image_names),
-                                   'None': [''] * len(self.image_names)})
+                                   'None': [''] * len(self.image_names),
+                                   'Notes': [''] * len(self.image_names)})
 
 
     def check_annotations(self):
@@ -198,23 +189,20 @@ class ImageAnnotatorApp:
         social_call_value = self.df.at[index, 'Social Call']
         feeding_buzz_value = self.df.at[index, 'Feeding Buzz']
         none_value = self.df.at[index, 'None']
+        note_value = self.df.at[index, "Notes"]
 
-        # Pre-check the checkboxes if 'x' is found in the corresponding column
-        if social_call_value > 0:
-            self.social_call_counter_label.config(text=int(social_call_value))
-            self.social_call_counter = int(social_call_value)
-        else:
-            self.social_call_counter_label.config(text=0)
-            self.social_call_counter = 0
+        # Change values according to previous annotations
+        self.social_call_counter_label.config(text=int(social_call_value))
+        self.social_call_counter = int(social_call_value)
 
-        if feeding_buzz_value > 0:
-            self.feeding_buzz_counter_label.config(text=int(feeding_buzz_value))
-            self.feeding_buzz_counter = int(feeding_buzz_value)
-        else:
-            self.feeding_buzz_counter_label.config(text=0)
-            self.feeding_buzz_counter = 0
+        self.feeding_buzz_counter_label.config(text=int(feeding_buzz_value))
+        self.feeding_buzz_counter = int(feeding_buzz_value)
 
         self.none_var.set(none_value == 'x')
+
+        self.note_text.delete("1.0", tk.END)
+        if str(note_value) != "nan":
+            self.note_text.insert(tk.END, note_value)
 
 
     def show_image(self):
@@ -256,9 +244,6 @@ class ImageAnnotatorApp:
     def textbox_focused(self):
         # Unbind all but unfocus keybinds
         for key, binding_id in self.bindings.items():
-            if key == "<Escape>":
-                continue
-
             self.master.unbind(key, binding_id)
 
 
@@ -316,6 +301,7 @@ class ImageAnnotatorApp:
         self.df.at[index, 'Social Call'] = self.social_call_counter
         self.df.at[index, 'Feeding Buzz'] = self.feeding_buzz_counter
         self.df.at[index, 'None'] = 'x' if self.none_var.get() else ''
+        self.df.at[index, 'Notes'] = self.note_text.get("1.0", "end-1c")
 
         # Another update done
         self.annotation_changes += 1
