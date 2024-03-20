@@ -24,8 +24,11 @@ class ImageAnnotatorApp:
         self.annotation_changes = 0
         self.df = None
 
+        self.bindings = {}  # Dictionary to store original bindings
+        self.unbind_keys = False
         self.master.geometry("800x600")
         self.create_widgets()
+        self.bind_keys()
 
     def create_widgets(self):
 
@@ -84,39 +87,56 @@ class ImageAnnotatorApp:
         self.next_image_button = tk.Button(self.button_frame, text=">", command=self.next_image)
         self.next_image_button.grid(row=4, column=0, sticky="e", pady=(10,10))
 
+        # Save note
+        self.note_text = tk.Text(self.button_frame, height=2, width=self.button_width, wrap="char")
+        self.note_text.grid(row=5, column=0, sticky="w", pady=(10,0))
+
+        self.note_button = tk.Button(self.button_frame,
+                                     text="Save note",
+                                     command=self.next_image,
+                                     width=self.button_width)
+        self.note_button.grid(row=6, column=0, sticky="w", pady=(5,10))
+        self.note_text.bind("<FocusIn>", self.textbox_focused)  # Bind the callback function
+
+        # # Unbind keys checkbox
+        # self.unbind_keys_checkbox = tk.Checkbutton(self.button_frame, text="Unbind keys",
+        #                                            command=self.toggle_key_bindings)
+        # self.unbind_keys_checkbox.grid(row=6, column=1, sticky="w")
+
         # Open file button
         self.open_file_button = tk.Button(self.button_frame,
                                           text="Open File",
                                           command=self.open_current_file,
                                           width=self.button_width)
-        self.open_file_button.grid(row=5, column=0, sticky="w")
+        self.open_file_button.grid(row=7, column=0, sticky="w")
 
         # Quit button
         self.quit_button = tk.Button(self.button_frame,
                                           text="Quit",
                                           command=self.quit,
                                           width=self.button_width)
-        self.quit_button.grid(row=6, column=0, sticky="w", pady=(10,10))
+        self.quit_button.grid(row=8, column=0, sticky="w", pady=(10,10))
 
         # Image viewer
-        self.image_label = tk.Label(self.master)
-        self.image_label.place(x=self.button_frame_width, y=0, relwidth=1, relheight=1)  # Position image label
         self.master.update_idletasks()
         window_width = self.master.winfo_width()
         image_label_width = window_width * 0.95 - self.button_frame_width
 
         self.image_label = tk.Label(self.master)
-        self.image_label.place(x=self.button_frame_width, y=0, width=image_label_width, relheight=1)  # Position image label
+        self.image_label.place(x=self.button_frame_width, y=0, width=image_label_width, relheight=1)
 
+
+    def bind_keys(self):
         # Bindings
-        self.master.bind("<s>", self.increment_social_call)
-        self.master.bind("<Shift-S>", self.sub_social_call)
-        self.master.bind("<f>", self.increment_feeding_buzz)
-        self.master.bind("<Shift-F>", self.sub_feeding_buzz)
-        self.master.bind("<n>", self.toggle_none)
-        self.master.bind("<space>", lambda event: self.next_image())
-        self.master.bind("<r>", lambda event: self.previous_image())
-        self.master.bind("<Escape>", self.quit)
+        self.bindings["<s>"] = self.master.bind("<s>", lambda event: self.increment_social_call())
+        self.bindings["<Shift-S>"] = self.master.bind("<Shift-S>", lambda event: self.sub_social_call())
+        self.bindings["<f>"] = self.master.bind("<f>", lambda event: self.increment_feeding_buzz())
+        self.bindings["<Shift-F>"] = self.master.bind("<Shift-F>", lambda event: self.sub_feeding_buzz())
+        self.bindings["<n>"] = self.master.bind("<n>", lambda event: self.toggle_none())
+        self.bindings["<space>"] = self.master.bind("<space>", lambda event: self.next_image())
+        self.bindings["<r>"] = self.master.bind("<r>", lambda event: self.previous_image())
+        self.bindings["<Shift-Escape>"] = self.master.bind("<Shift-Escape>", lambda event: self.quit())
+        self.bindings["<Escape>"] = self.master.bind("<Escape>", lambda event: self.unfocus_text())
 
     def open_current_file(self):
         current_file_path = os.path.join(self.folder_path, self.image_names[self.image_index])
@@ -155,6 +175,7 @@ class ImageAnnotatorApp:
         if self.image_index == len(self.image_names):
             self.image_index = 0
 
+
     def load_annotations(self):
         excel_file_path = os.path.join(self.folder_path, 'annotations.xlsx')
 
@@ -168,8 +189,6 @@ class ImageAnnotatorApp:
                                    'Feeding Buzz': [0] * len(self.image_names),
                                    'None': [''] * len(self.image_names)})
 
-        # # Save the DataFrame to the annotations Excel file
-        # df.to_excel(excel_file_path, index=False)
 
     def check_annotations(self):
         # Get the current image name
@@ -197,6 +216,7 @@ class ImageAnnotatorApp:
 
         self.none_var.set(none_value == 'x')
 
+
     def show_image(self):
         if self.image_index < 0:
             return
@@ -218,11 +238,13 @@ class ImageAnnotatorApp:
         # Change title to image name
         self.master.title(os.path.basename(image_path))
 
+
     def next_image(self):
         self.update_annotations()
         self.image_index = (self.image_index + 1) % len(self.image_names)
         self.show_image()
         self.check_annotations()
+
 
     def previous_image(self):
         self.update_annotations()
@@ -230,9 +252,25 @@ class ImageAnnotatorApp:
         self.show_image()
         self.check_annotations()
 
+
+    def textbox_focused(self):
+        # Unbind all but unfocus keybinds
+        for key, binding_id in self.bindings.items():
+            if key == "<Escape>":
+                continue
+
+            self.master.unbind(key, binding_id)
+
+
+    def unfocus_text(self):
+        root.focus()
+        self.bind_keys()
+
+
     def increment_social_call(self):
         self.social_call_counter += 1
         self.social_call_counter_label.config(text=self.social_call_counter)
+
 
     def sub_social_call(self):
         if self.social_call_counter == 0:
@@ -241,15 +279,11 @@ class ImageAnnotatorApp:
         self.social_call_counter -= 1
         self.social_call_counter_label.config(text=self.social_call_counter)
 
-    def increment_social_call_key(self, event):
-        self.increment_social_call()
-
-    def sub_social_call_key(self, event):
-        self.sub_social_call()
 
     def increment_feeding_buzz(self):
         self.feeding_buzz_counter += 1
         self.feeding_buzz_counter_label.config(text=self.feeding_buzz_counter)
+
 
     def sub_feeding_buzz(self):
         if self.feeding_buzz_counter == 0:
@@ -258,22 +292,19 @@ class ImageAnnotatorApp:
         self.feeding_buzz_counter -= 1
         self.feeding_buzz_counter_label.config(text=self.feeding_buzz_counter)
 
-    def increment_feeding_buzz_key(self, event):
-        self.increment_feeding_buzz()
 
-    def sub_feeding_buzz_key(self, event):
-        self.sub_feeding_buzz()
-
-    def toggle_none(self, event):
+    def toggle_none(self):
         self.none_var.set(not self.none_var.get())
 
         if self.none_var.get():
             time.sleep(0.1)
             self.next_image()
 
-    def quit(self, event):
+
+    def quit(self):
         self.update_annotations(force=True)
         root.destroy()
+
 
     def update_annotations(self, force=False):
         if self.df is None:
@@ -295,6 +326,7 @@ class ImageAnnotatorApp:
             excel_file_path = os.path.join(self.folder_path, 'annotations.xlsx')
             self.df.to_excel(excel_file_path, index=False)
             self.annotation_changes = 0  # Reset the counter after saving
+
 
 if __name__ == "__main__":
     root = tk.Tk()
