@@ -21,6 +21,7 @@ class ImageAnnotatorApp:
         self.social_call_counter = 0
         self.feeding_buzz_counter = 0
         self.none_var = tk.BooleanVar()
+        self.bat_var = tk.BooleanVar()
 
         self.annotation_changes = 0
         self.df = None
@@ -80,16 +81,21 @@ class ImageAnnotatorApp:
                                             offvalue=False)
         self.none_checkbox.grid(row=3, column=0, sticky="w")
 
+        # Bat checkbox
+        self.bat_checkbox = tk.Checkbutton(self.button_frame, text="Bat", variable=self.bat_var, onvalue=True,
+                                            offvalue=False)
+        self.bat_checkbox.grid(row=4, column=0, sticky="w")
+
         # < and > button
         self.previous_image_button = tk.Button(self.button_frame, text="<", command=self.previous_image)
-        self.previous_image_button.grid(row=4, column=0, sticky="w", pady=(10,10))
+        self.previous_image_button.grid(row=5, column=0, sticky="w", pady=(10,10))
 
         self.next_image_button = tk.Button(self.button_frame, text=">", command=self.next_image)
-        self.next_image_button.grid(row=4, column=0, sticky="e", pady=(10,10))
+        self.next_image_button.grid(row=5, column=0, sticky="e", pady=(10,10))
 
         # Notes
         self.note_text = tk.Text(self.button_frame, height=2, width=self.button_width, wrap="char")
-        self.note_text.grid(row=5, column=0, sticky="w", pady=(10,10))
+        self.note_text.grid(row=6, column=0, sticky="w", pady=(10,10))
 
         # Open file button
         self.open_file_button = tk.Button(self.button_frame,
@@ -104,6 +110,13 @@ class ImageAnnotatorApp:
                                           command=self.quit,
                                           width=self.button_width)
         self.quit_button.grid(row=8, column=0, sticky="w", pady=(10,10))
+
+        # Find next unannotated image
+        self.next_unannotated_button = tk.Button(self.button_frame,
+                                          text="Next to \nannotate",
+                                          command=self.next_unannotated_image,
+                                          width=self.button_width)
+        self.next_unannotated_button.grid(row=9, column=0, sticky="w")
 
         # Image viewer
         self.master.update_idletasks()
@@ -123,6 +136,7 @@ class ImageAnnotatorApp:
         self.bindings["<Shift-S>"] = self.master.bind("<Shift-S>", lambda event: self.sub_social_call())
         self.bindings["<f>"] = self.master.bind("<f>", lambda event: self.increment_feeding_buzz())
         self.bindings["<Shift-F>"] = self.master.bind("<Shift-F>", lambda event: self.sub_feeding_buzz())
+        self.bindings["<b>"] = self.master.bind("<b>", lambda event: self.toggle_bat())
         self.bindings["<n>"] = self.master.bind("<n>", lambda event: self.toggle_none())
         self.bindings["<space>"] = self.master.bind("<space>", lambda event: self.next_image())
         self.bindings["<r>"] = self.master.bind("<r>", lambda event: self.previous_image())
@@ -154,9 +168,10 @@ class ImageAnnotatorApp:
             social_call_value = self.df.at[self.image_index, 'Social Call']
             feeding_buzz_value = self.df.at[self.image_index, 'Feeding Buzz']
             none_value = self.df.at[self.image_index, 'None']
+            bat_value = self.df.at[self.image_index, 'Bat']
 
             # If annotation is found in any column, move to the next image
-            if social_call_value > 0 or feeding_buzz_value > 0 or none_value == 'x':
+            if social_call_value > 0 or feeding_buzz_value > 0 or none_value == 'x' or bat_value == 'x':
                 self.image_index += 1
             else:
                 break
@@ -178,6 +193,7 @@ class ImageAnnotatorApp:
                                    'Social Call': [0] * len(self.image_names),
                                    'Feeding Buzz': [0] * len(self.image_names),
                                    'None': [''] * len(self.image_names),
+                                   'Bat': [''] * len(self.image_names),
                                    'Notes': [''] * len(self.image_names)})
 
 
@@ -189,6 +205,7 @@ class ImageAnnotatorApp:
         social_call_value = self.df.at[index, 'Social Call']
         feeding_buzz_value = self.df.at[index, 'Feeding Buzz']
         none_value = self.df.at[index, 'None']
+        bat_value = self.df.at[index, 'Bat']
         note_value = self.df.at[index, "Notes"]
 
         # Change values according to previous annotations
@@ -199,6 +216,7 @@ class ImageAnnotatorApp:
         self.feeding_buzz_counter = int(feeding_buzz_value)
 
         self.none_var.set(none_value == 'x')
+        self.bat_var.set(bat_value == 'x')
 
         self.note_text.delete("1.0", tk.END)
         if str(note_value) != "nan":
@@ -234,6 +252,12 @@ class ImageAnnotatorApp:
         self.check_annotations()
 
 
+    def next_unannotated_image(self):
+        self.find_next_image_without_annotations()
+        self.show_image()
+        self.check_annotations()
+
+
     def previous_image(self):
         self.update_annotations()
         self.image_index = (self.image_index - 1) % len(self.image_names)
@@ -256,6 +280,9 @@ class ImageAnnotatorApp:
         self.social_call_counter += 1
         self.social_call_counter_label.config(text=self.social_call_counter)
 
+        if self.social_call_counter > 0:
+            self.bat_var.set(True)
+
 
     def sub_social_call(self):
         if self.social_call_counter == 0:
@@ -264,10 +291,16 @@ class ImageAnnotatorApp:
         self.social_call_counter -= 1
         self.social_call_counter_label.config(text=self.social_call_counter)
 
+        if self.social_call_counter == 0 and self.feeding_buzz_counter == 0:
+            self.bat_var.set(False)
+
 
     def increment_feeding_buzz(self):
         self.feeding_buzz_counter += 1
         self.feeding_buzz_counter_label.config(text=self.feeding_buzz_counter)
+
+        if self.feeding_buzz_counter > 0:
+            self.bat_var.set(True)
 
 
     def sub_feeding_buzz(self):
@@ -277,6 +310,9 @@ class ImageAnnotatorApp:
         self.feeding_buzz_counter -= 1
         self.feeding_buzz_counter_label.config(text=self.feeding_buzz_counter)
 
+        if self.social_call_counter == 0 and self.feeding_buzz_counter == 0:
+            self.bat_var.set(False)
+
 
     def toggle_none(self):
         self.none_var.set(not self.none_var.get())
@@ -284,6 +320,10 @@ class ImageAnnotatorApp:
         if self.none_var.get():
             time.sleep(0.1)
             self.next_image()
+
+
+    def toggle_bat(self):
+        self.bat_var.set(not self.bat_var.get())
 
 
     def quit(self):
@@ -301,6 +341,7 @@ class ImageAnnotatorApp:
         self.df.at[index, 'Social Call'] = self.social_call_counter
         self.df.at[index, 'Feeding Buzz'] = self.feeding_buzz_counter
         self.df.at[index, 'None'] = 'x' if self.none_var.get() else ''
+        self.df.at[index, 'Bat'] = 'x' if self.bat_var.get() else ''
         self.df.at[index, 'Notes'] = self.note_text.get("1.0", "end-1c")
 
         # Another update done
