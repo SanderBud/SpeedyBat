@@ -22,6 +22,10 @@ class ImageAnnotatorApp:
         self.feeding_buzz_counter = 0
         self.none_var = tk.BooleanVar()
         self.bat_var = tk.BooleanVar()
+        self.keep_annotater_var = tk.BooleanVar()
+
+        self.current_annotater = ""
+        self.previous_annotater = ""
 
         self.annotation_changes = 0
         self.df = None
@@ -118,6 +122,15 @@ class ImageAnnotatorApp:
                                           width=self.button_width)
         self.next_unannotated_button.grid(row=9, column=0, sticky="w")
 
+        # Annotater
+        self.annotater_text = tk.Text(self.button_frame, height=1, width=self.button_width, wrap="char")
+        self.annotater_text.grid(row=10, column=0, sticky="w", pady=(10,10))
+
+        # Keep annotater checkbox
+        self.keep_annotater_checkbox = tk.Checkbutton(self.button_frame, text="Keep annotater",
+                                                      variable=self.keep_annotater_var, onvalue=True, offvalue=False)
+        self.keep_annotater_checkbox.grid(row=11, column=0, sticky="w")
+
         # Image viewer
         self.master.update_idletasks()
         window_width = self.master.winfo_width()
@@ -128,7 +141,9 @@ class ImageAnnotatorApp:
 
         # Essential binds
         self.note_text.bind("<FocusIn>", lambda event: self.textbox_focused())
+        self.annotater_text.bind("<FocusIn>", lambda event: self.textbox_focused())
         self.master.bind("<Escape>", lambda event: self.unfocus_text())
+        self.master.bind("<Button-1>", self.unfocus_text)
 
     def bind_keys(self):
         # Bindings
@@ -186,7 +201,7 @@ class ImageAnnotatorApp:
 
         # Check if the annotations Excel file exists
         if os.path.exists(excel_file_path):
-            self.df = pd.read_excel(excel_file_path)
+            self.df = pd.read_excel(excel_file_path, keep_default_na=False)
         else:
             # Create a new DataFrame if the file doesn't exist
             self.df = pd.DataFrame({'Image Name': self.image_names,
@@ -194,7 +209,8 @@ class ImageAnnotatorApp:
                                    'Feeding Buzz': [0] * len(self.image_names),
                                    'None': [''] * len(self.image_names),
                                    'Bat': [''] * len(self.image_names),
-                                   'Notes': [''] * len(self.image_names)})
+                                   'Notes': [''] * len(self.image_names),
+                                   'Annotater': [''] * len(self.image_names)})
 
 
     def check_annotations(self):
@@ -207,6 +223,7 @@ class ImageAnnotatorApp:
         none_value = self.df.at[index, 'None']
         bat_value = self.df.at[index, 'Bat']
         note_value = self.df.at[index, "Notes"]
+        annotater_value = self.df.at[index, "Annotater"]
 
         # Change values according to previous annotations
         self.social_call_counter_label.config(text=int(social_call_value))
@@ -219,8 +236,23 @@ class ImageAnnotatorApp:
         self.bat_var.set(bat_value == 'x')
 
         self.note_text.delete("1.0", tk.END)
-        if str(note_value) != "nan":
-            self.note_text.insert(tk.END, note_value)
+        if note_value: self.note_text.insert(tk.END, note_value)
+
+        self.current_annotater = self.annotater_text.get("1.0", "end-1c")
+        self.previous_annotater = annotater_value
+
+        print(f"Previous annotater: {self.previous_annotater}, current one: {self.current_annotater}")
+
+        if not annotater_value: # If annotate box was empty, nothing happens
+            return
+
+        if not self.keep_annotater_var.get():
+            self.annotater_text.delete("1.0", tk.END)
+            self.annotater_text.insert(tk.END, annotater_value)
+        elif self.keep_annotater_var.get() and self.current_annotater == self.previous_annotater:
+            pass # Nothing has to happen when annotaters match already
+        elif self.keep_annotater_var.get() and self.current_annotater != self.previous_annotater:
+            print("wil annotater houden maar vorige was een andere annotater, on nee wat nu")
 
 
     def show_image(self):
@@ -271,9 +303,10 @@ class ImageAnnotatorApp:
             self.master.unbind(key, binding_id)
 
 
-    def unfocus_text(self):
-        root.focus()
-        self.bind_keys()
+    def unfocus_text(self, event):
+        if not isinstance(event.widget, tk.Text):
+            root.focus()
+            self.bind_keys()
 
 
     def increment_social_call(self):
@@ -336,6 +369,7 @@ class ImageAnnotatorApp:
             return
 
         index = self.image_index
+        row_before_updating = self.df.loc[index].tolist()
 
         # Update cells
         self.df.at[index, 'Social Call'] = self.social_call_counter
@@ -343,16 +377,58 @@ class ImageAnnotatorApp:
         self.df.at[index, 'None'] = 'x' if self.none_var.get() else ''
         self.df.at[index, 'Bat'] = 'x' if self.bat_var.get() else ''
         self.df.at[index, 'Notes'] = self.note_text.get("1.0", "end-1c")
+        self.df.at[index, 'Annotater'] = self.annotater_text.get("1.0", "end-1c")
 
-        # Another update done
-        self.annotation_changes += 1
-        print(self.annotation_changes)
+        row_after_updating = self.df.loc[index].tolist()
 
-        # Save the DataFrame to the annotations Excel file every 10 changes
-        if self.annotation_changes >= 10 or force:
-            excel_file_path = os.path.join(self.folder_path, 'annotations.xlsx')
-            self.df.to_excel(excel_file_path, index=False)
-            self.annotation_changes = 0  # Reset the counter after saving
+        if self.previous_annotater and self.keep_annotater_var.get() and \
+                self.previous_annotater != self.current_annotater:
+            self.popup_annotater_warning()
+            return
+
+        if row_before_updating != row_after_updating:
+            print("Something changed!")
+
+            # Another update done
+            self.annotation_changes += 1
+            print(self.annotation_changes)
+
+            # Save the DataFrame to the annotations Excel file every 10 changes
+            if self.annotation_changes >= 10 or force:
+                excel_file_path = os.path.join(self.folder_path, 'annotations.xlsx')
+                self.df.to_excel(excel_file_path, index=False)
+                self.annotation_changes = 0  # Reset the counter after saving
+
+    def popup_annotater_warning(self):
+        # Get the root window coordinates
+        root_x = root.winfo_x()
+        root_y = root.winfo_y()
+        root_width = root.winfo_width()
+        root_height = root.winfo_height()
+
+        # Calculate the center position of the root window
+        center_x = root_x + root_width // 2
+        center_y = root_y + root_height // 2
+
+        # Create the popup window
+        popup = tk.Toplevel(root)
+        popup.title("Annotater warning")
+
+        # Position the popup window relative to the center of the root window
+        popup_width = 200  # Adjust as needed
+        popup_height = 150  # Adjust as needed
+        popup.geometry("{}x{}+{}+{}".format(popup_width, popup_height,
+                                            center_x - popup_width // 2, center_y - popup_height // 2))
+
+        label = tk.Label(popup, text=f"This picture has been annotater \n"
+                                     f"already by {self.previous_annotater}. \n\n"
+                                     f"Are you sure you want to \noverwrite the annotation?")
+        label.pack(pady=10)
+
+        close_button = tk.Button(popup, text="Close", command=popup.destroy)
+        close_button.pack()
+        close_button = tk.Button(popup, text="Continue", command=popup.destroy)
+        close_button.pack()
 
 
 if __name__ == "__main__":
