@@ -238,13 +238,15 @@ class ImageAnnotatorApp:
         self.note_text.delete("1.0", tk.END)
         if note_value: self.note_text.insert(tk.END, note_value)
 
+
+
         self.current_annotater = self.annotater_text.get("1.0", "end-1c")
         self.previous_annotater = annotater_value
 
-        print(f"Previous annotater: {self.previous_annotater}, current one: {self.current_annotater}")
-
-        if not annotater_value: # If annotate box was empty, nothing happens
+        if not annotater_value:  # If annotate box was empty, nothing happens
             return
+
+        print(f"Previous annotater: {self.previous_annotater}, current one: {self.current_annotater}")
 
         if not self.keep_annotater_var.get():
             self.annotater_text.delete("1.0", tk.END)
