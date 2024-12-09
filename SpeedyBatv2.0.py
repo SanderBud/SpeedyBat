@@ -49,6 +49,10 @@ class ImageAnnotator:
         self.image_label = tk.Label(self.root)
         self.image_label.pack()
 
+        # Progress label
+        self.progress_label = tk.Label(self.root, text="0/0", font=("Arial", 12))
+        self.progress_label.place(relx=0.75, rely=0.75)
+
         self.checkboxes_frame = tk.Frame(self.root)
         self.checkboxes_frame.pack()
 
@@ -86,6 +90,7 @@ class ImageAnnotator:
             self.create_annotation_file()  # Call without arguments
             self.image_index = 0  # Start at the first image
 
+        self.update_progress_label()
         self.show_image()
 
     def read_existing_annotations(self):
@@ -162,15 +167,29 @@ class ImageAnnotator:
 
         image_path = os.path.join(self.folder_path, self.image_list[self.image_index])
         image = Image.open(image_path)
-        w, h = self.root.winfo_width(), self.root.winfo_height()  # Get window width and height
-        image.thumbnail((w, h))  # Resize the image to fit the window
-        photo = ImageTk.PhotoImage(image)
+
+        # Get window dimensions and apply a 10-pixel margin
+        max_width = self.root.winfo_width() - 20
+        max_height = self.root.winfo_height() - 20
+
+        # Determine scale factor to fit the image within the target dimensions
+        scale_factor = min(max_width / image.width, max_height / image.height)
+
+        # Resize the image while maintaining the aspect ratio
+        new_width = int(image.width * scale_factor)
+        new_height = int(image.height * scale_factor)
+        resized_image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+
+        # Resize the image to fit within the adjusted dimensions
+        # image.thumbnail((max_width, max_height))
+        photo = ImageTk.PhotoImage(resized_image)
         self.image_label.configure(image=photo)
         self.image_label.image = photo
 
         # Change title to image name
         self.root.title(os.path.basename(image_path))
         self.update_checkboxes()
+        self.image_label.update_idletasks()  # Ensure geometry is updated
 
     def update_checkboxes(self):
         # Clear previous checkboxes
@@ -198,12 +217,14 @@ class ImageAnnotator:
         if self.image_index < len(self.image_list) - 1:
             self.save_annotations()  # Save current annotations before moving
             self.image_index += 1
+            self.update_progress_label()
             self.show_image()
 
     def show_previous_image(self):
         if self.image_index > 0:
             self.save_annotations()  # Save current annotations before moving
             self.image_index -= 1
+            self.update_progress_label()
             self.show_image()
 
     def save_annotations(self):
@@ -236,6 +257,16 @@ class ImageAnnotator:
             var = self.field_vars[field_name]  # Get the IntVar for the field
             var.set(1 - var.get())  # Toggle checkbox state
             self.update_annotation(field_name, var)
+
+    def update_progress_label(self):
+        """Update the progress label with the current image index."""
+        if self.image_list:
+            self.progress_label.config(
+                text=f"{self.image_index + 1}/{len(self.image_list)}"
+            )
+        else:
+            self.progress_label.config(text="0/0")
+
 
 
 if __name__ == "__main__":
